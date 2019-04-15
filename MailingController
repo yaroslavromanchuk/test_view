@@ -18,12 +18,12 @@ public function init()
 	 if (isset($this->post->getarticles)) {
                 if (isset($this->post->id)) {
         $data = [];
-    $articles = wsActiveRecord::useStatic('Shoparticles')->findAll(['category_id' => $this->post->id, 'active' => 'y', 'stock > 0', 'status'=>3],['views'=>'DESC']);
+    $articles = wsActiveRecord::useStatic('ClassName')->findAll(['category_id' => $this->post->id, 'active' => 'y', 'stock > 0', 'status'=>3],['views'=>'DESC']);
                     if ($articles->count()){
                         foreach ($articles as $article){
                             $data[] = [
                                 'id' => $article->getId(),
-                                'title' => $article->getTitle() . " (" . Shoparticles::showPrice($article->getRealPrice()) . " грн)",
+                                'title' => $article->getTitle() . " (" . ClassName::showPrice($article->getRealPrice()) . " грн)",
                                 'img' => $article->getImagePath('listing')
                             ];
                 }
@@ -97,9 +97,8 @@ public function init()
                                 . '&cm=link'
                                 . '&cn=TEST';
                  
-        SendMail::getInstance()->sendSubEmail($this->post->test_email, 'Testing', $subject, $this->view->render('mailing/general-email.tpl.php'));
-	//SendMail::getInstance()->sendSubEmail($_POST['test_email'], 'Testing', $subject, $msg, '','','', '', $copy, 'management@red.ua', 'Ирина');
-		
+        ClassName::getInstance()->sendSubEmail($this->post->test_email, 'Testing', $subject, $this->view->render('mailing/general-email.tpl.php'));
+
             die(json_encode(array('status' => 'send', 'from' => $this->post->test_email)));
     }elseif($this->post->method == 'go_send_email') {
         $cnt = 0;
@@ -135,8 +134,8 @@ public function init()
     $count = $this->post->count;
                     
     $emails = [];
-foreach (wsActiveRecord::useStatic('Subscriber')->findAll(['active' => 1, 'segment_id' => $this->post->segment_id ], ['email' => 'ASC'], [$this->post->from_mail, $count]) as $sub){  
-    if (isValidEmailNew($sub->getEmail()) and isValidEmailRu($sub->getEmail())){
+foreach (wsActiveRecord::useStatic('ClassName')->findAll(['active' => 1, 'segment_id' => $this->post->segment_id ], ['email' => 'ASC'], [$this->post->from_mail, $count]) as $sub){  
+    if (isValidEmail($sub->getEmail())){
 		$subject_new = $subject;
                     if(isset( $this->post->s_start) and  $this->post->s_start == 1){
 				$subject_new = $subject_start.', '.$sub->getName().', '.$subject;
@@ -161,21 +160,21 @@ foreach (wsActiveRecord::useStatic('Subscriber')->findAll(['active' => 1, 'segme
                         $this->view->name = $sub->getName();
                         $this->view->email = $sub->getEmail();
                         $emails[] = $sub->getEmail();
-			$res = SendMail::getInstance()->sendSubEmail($sub->getEmail(), $sub->getName(), $subject_new, $this->view->render('mailing/general-email.tpl.php'));
+			$res = ClassName::getInstance()->sendSubEmail($sub->getEmail(), $sub->getName(), $subject_new, $this->view->render('mailing/general-email.tpl.php'));
 			$cnt++;
 		}else{
                     $sub->setActive(0);
                     $sub->save();
                     $error++;
-			wsLog::add('E-mail error: ' . $sub->getEmail(), 'EMAIL');
+			ClassName::add('E-mail error: ' . $sub->getEmail(), 'EMAIL');
 		}			 
     }	   
     die(json_encode(array('status' => 'send', 'from' => $this->post->from_mail, 'count' => $count, 'emails' => implode(',',$emails), 'cnt'=>$cnt, 'error'=>$error))); 
         }
         
-        if($this->get->id){ $this->view->pemail = wsActiveRecord::useStatic('Emailpost')->findById($this->get->id);}
+        if($this->get->id){ $this->view->pemail = wsActiveRecord::useStatic('ClassName')->findById($this->get->id);}
         
-            echo $this->render('template/views/subscribers/general.tpl.php');
+            echo $this->render('general.tpl.php');
     }
     
     /**
@@ -200,9 +199,9 @@ foreach (wsActiveRecord::useStatic('Subscriber')->findAll(['active' => 1, 'segme
 				$filename = $_FILES['file']['name'];				
 							}
 							}
-        SendMail::getInstance()->sendEmail($email, $name, $subject, $msg, $uploadfile, $filename);                      
+        ClassName::getInstance()->sendEmail($email, $name, $subject, $msg, $uploadfile, $filename);                      
 	}
-	echo $this->render('template/views/page/email_page.tpl.php');
+	echo $this->render('email_page.tpl.php');
 	
 	}
   
