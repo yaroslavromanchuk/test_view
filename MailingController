@@ -1,0 +1,209 @@
+<?php
+
+class MailingController extends controllerAbstract
+{
+public function init()
+    {
+        parent::init();
+    }
+    
+    /**
+ * Рассылка email, с возможностью подгрузки товара, предпросмотра, тестового email перед отправкой ну сама рассілка на большое количество подписчиков.
+ * Организована с использованием ajax, для предотвращения попадания в спам почтового ящика.
+ * Проверка на валидность email, ведение логов
+ */	
+ public function generalmailingAction()
+    {
+     
+	 if (isset($this->post->getarticles)) {
+                if (isset($this->post->id)) {
+        $data = [];
+    $articles = wsActiveRecord::useStatic('Shoparticles')->findAll(['category_id' => $this->post->id, 'active' => 'y', 'stock > 0', 'status'=>3],['views'=>'DESC']);
+                    if ($articles->count()){
+                        foreach ($articles as $article){
+                            $data[] = [
+                                'id' => $article->getId(),
+                                'title' => $article->getTitle() . " (" . Shoparticles::showPrice($article->getRealPrice()) . " грн)",
+                                'img' => $article->getImagePath('listing')
+                            ];
+                }
+                    }
+                    $res = [
+                        'result' => 'done',
+                        'type' => 'articles',
+                        'data' => $data
+                    ];
+                }else{
+                    $res = ['result' => 'false'];
+                }
+                die(json_encode($res));
+            }elseif($this->post->method == 'preview') {
+            $this->view->post = $this->post;
+        if(isset($this->post->s_start) and $this->post->s_start == 1){
+            $subject = $this->post->subject_start.', TEST, '.$this->post->subject; 
+        }else{
+            $subject = $this->post->subject;
+        }
+        $this->view->name = 'Test';
+        $this->view->email = 'test@red.ua';
+        $this->view->track = '?'
+                                . '&cs=test_click_'.date('d.m.Y').''
+                                . '&cm=email'
+                                . '&cn=TEST';
+        $this->view->unsubscribe = ''
+                                . '&cs=test_unsubscribe_'.date('d.m.Y').''
+                                . '&cm=link'
+                                . '&cn=TEST';
+        die(json_encode(['title' => $subject, 'message'=>$this->view->render('mailing/general-email.tpl.php')])); 
+            }elseif ($this->post->method == 'save'){
+                $id = false;
+                if($this->post->id_post){
+                    $id = $this->post->id_post;
+                }
+                                    $parr = [
+                                        'ctime' => date('Y-m-d H:i:s'),
+                                        'id_customer_new' => $this->user->getId(),
+                                        'segment_id' => $this->post->segment_id,
+                                        'subject_start' => isset($this->post->subject_start)?$this->post->subject_start:'',
+                                        'subject' => isset($this->post->subject)?$this->post->subject:'',
+                                        'intro' => $this->post->intro?$this->post->intro:'',
+                                        'ending' => $this->post->ending?$this->post->ending:''
+                                    ];
+                die(Subscribers::saveSubscribe($id, $parr));
+            }elseif($this->post->method == 'go_test_email'){
+            $subject_start = '';
+            $subject = $this->post->subject;
+	if($this->post->subject_start){
+            $subject_start = $this->post->subject_start;
+        }
+	if (isset($this->post->s_start) and $this->post->s_start == 1){
+            $subject = $subject_start.', TEST, '.$subject; 
+        }
+        
+        $copy = 2;                             
+	if(isset($this->post->copy) and isset($this->post->copy_email)){
+            $copy = $this->post->copy;   
+	}
+        
+        $this->view->post = $this->post;  
+        $this->view->name = 'Test';
+        $this->view->email = $this->post->test_email;
+        $this->view->track = '?'
+                                . '&cs=test_click_'.date('d.m.Y').''
+                                . '&cm=email'
+                                . '&cn=TEST';
+        $this->view->unsubscribe = ''
+                                . '&cs=test_unsubscribe_'.date('d.m.Y').''
+                                . '&cm=link'
+                                . '&cn=TEST';
+                 
+        SendMail::getInstance()->sendSubEmail($this->post->test_email, 'Testing', $subject, $this->view->render('mailing/general-email.tpl.php'));
+	//SendMail::getInstance()->sendSubEmail($_POST['test_email'], 'Testing', $subject, $msg, '','','', '', $copy, 'management@red.ua', 'Ирина');
+		
+            die(json_encode(array('status' => 'send', 'from' => $this->post->test_email)));
+    }elseif($this->post->method == 'go_send_email') {
+        $cnt = 0;
+	$error = 0;
+	$subject_start = '';
+        $subject = $this->post->subject;
+        
+	if($this->post->subject_start){
+            $subject_start = $this->post->subject_start;
+        }
+	if($this->post->from_mail == 0){
+				if($this->post->id_post){
+				$s = new Emailpost($this->post->id_post);
+				$s->setGo(date('Y-m-d H:i:s'));
+				$s->setIdCustomerGo($this->user->getId());
+				$s->save();
+				}else{
+                                    $parr = [
+                                        'ctime' => date('Y-m-d H:i:s'),
+                                        'go' => date('Y-m-d H:i:s'),
+                                        'id_customer_new' => $this->user->getId(),
+                                        'id_customer_go' => $this->user->getId(),
+                                        'segment_id' => $this->post->segment_id,
+                                        'subject_start' => $subject_start,
+                                        'subject' => $subject,
+                                        'intro' => $this->post->intro?$this->post->intro:'',
+                                        'ending' => $this->post->ending?$this->post->ending:''
+                                    ];
+				Subscribers::saveSubscribe(false, $parr);
+				}
+		}
+    $this->view->post = $this->post;        
+    $count = $this->post->count;
+                    
+    $emails = [];
+foreach (wsActiveRecord::useStatic('Subscriber')->findAll(['active' => 1, 'segment_id' => $this->post->segment_id ], ['email' => 'ASC'], [$this->post->from_mail, $count]) as $sub){  
+    if (isValidEmailNew($sub->getEmail()) and isValidEmailRu($sub->getEmail())){
+		$subject_new = $subject;
+                    if(isset( $this->post->s_start) and  $this->post->s_start == 1){
+				$subject_new = $subject_start.', '.$sub->getName().', '.$subject;
+                    }
+			$this->view->openimg = ''
+                                . 'https://www.google-analytics.com/collect?v=1&tid=UA-29951245-1'
+                                . '&cid='.$sub->getId().''
+                                . '&t=event'
+                                . '&el='.$sub->getId().''
+                                . '&cs='.strtolower($sub->track).'_open_'.date('d.m.Y').''
+                                . '&cm=open'
+                                . '&cn='.$sub->track;
+                        $this->view->track = '?'
+                                . '&cs='.strtolower($sub->track).'_click_'.date('d.m.Y').''
+                                . '&cm=email'
+                                . '&cn='.$sub->track;
+                        $this->view->unsubscribe = ''
+                                . '&cs='.strtolower($sub->track).'_unsubscribe_'.date('d.m.Y').''
+                                . '&cm=link'
+                                . '&cn='.$sub->track;
+                       
+                        $this->view->name = $sub->getName();
+                        $this->view->email = $sub->getEmail();
+                        $emails[] = $sub->getEmail();
+			$res = SendMail::getInstance()->sendSubEmail($sub->getEmail(), $sub->getName(), $subject_new, $this->view->render('mailing/general-email.tpl.php'));
+			$cnt++;
+		}else{
+                    $sub->setActive(0);
+                    $sub->save();
+                    $error++;
+			wsLog::add('E-mail error: ' . $sub->getEmail(), 'EMAIL');
+		}			 
+    }	   
+    die(json_encode(array('status' => 'send', 'from' => $this->post->from_mail, 'count' => $count, 'emails' => implode(',',$emails), 'cnt'=>$cnt, 'error'=>$error))); 
+        }
+        
+        if($this->get->id){ $this->view->pemail = wsActiveRecord::useStatic('Emailpost')->findById($this->get->id);}
+        
+            echo $this->render('template/views/subscribers/general.tpl.php');
+    }
+    
+    /**
+         * отправка письма с возможностью вложить файл
+         */
+	public function emailAction(){
+	
+	if(isset($this->post->send)){
+	$email = $this->post->email;
+	$name = $this->post->name;
+	$subject = 'Subject';
+		if($this->post->subject) {$subject = $this->post->subject;}
+		
+	$msg = 'Message';
+		if($this->post->message) {$msg = $this->post->message;}
+	
+	$uploadfile = '';
+	$filename = '';
+	if (isset($_FILES['file'])) {
+        if (is_uploaded_file($_FILES['file']['tmp_name'])) {
+			$uploadfile = $_FILES['file']['tmp_name'];
+				$filename = $_FILES['file']['name'];				
+							}
+							}
+        SendMail::getInstance()->sendEmail($email, $name, $subject, $msg, $uploadfile, $filename);                      
+	}
+	echo $this->render('template/views/page/email_page.tpl.php');
+	
+	}
+  
+}
